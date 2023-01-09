@@ -2,19 +2,26 @@ use clap::Parser;
 use std::error::Error;
 use std::fs::read_dir;
 use std::fs::File;
+use std::fs::OpenOptions;
 use std::io::BufRead;
-use std::io::BufReader;
-use std::path::Path;
+use std::io::{BufReader, Write};
+use std::path::PathBuf;
 
+pub struct FastqFile {
+    pub fp: String,
+    pub records: Vec<Record>,
+}
+
+#[derive(Clone, Debug)]
 pub struct Record {
-    id: String,
-    seq: String,
-    plus: String,
-    qual: String,
+    pub id: String,
+    pub seq: String,
+    pub plus: String,
+    pub qual: String,
 }
 
 impl Record {
-    fn new() -> Record {
+    pub fn new() -> Record {
         Record {
             id: String::new(),
             seq: String::new(),
@@ -22,9 +29,24 @@ impl Record {
             qual: String::new(),
         }
     }
-    fn verify_integrity(&self) -> bool {
+    pub fn verify_integrity(&self) -> bool {
         // Check that the length of the sequence and quality are the same.
         self.seq.len() == self.qual.len()
+    }
+    pub fn write_record(&self, fp: &PathBuf) -> Result<(), Box<dyn Error>> {
+        // Write the record to a file.
+        let mut file = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .append(true)
+            .open(fp)
+            .unwrap();
+        writeln!(file, "{}", self.id)?;
+        writeln!(file, "{}", self.seq)?;
+        writeln!(file, "{}", self.plus)?;
+        writeln!(file, "{}", self.qual)?;
+
+        Ok(())
     }
 }
 
@@ -85,12 +107,16 @@ struct Args {
     input: String,
 }
 
-fn main() {
+pub fn read_and_get_records() -> Result<Vec<FastqFile>, Box<dyn Error>> {
     // Add clap argument to read file path.
     let args: Args = Args::parse();
 
     // We want to read all the files in the directory.
     let paths = read_dir(&args.input).unwrap();
+
+    // Initialize fastqfile vec.
+    let mut fastqfiles: Vec<FastqFile> = Vec::new();
+
     for p in paths {
         let path = p.unwrap().path();
         let path_str = path.to_str().unwrap();
@@ -99,13 +125,22 @@ fn main() {
                 Ok(r) => r,
                 Err(e) => {
                     println!("Error reading file {}: {}", path_str, e);
-                    return;
+                    return Err(e);
                 }
             };
-            let avg = get_average_quality_score(&records);
-            let fp = Path::new(path_str);
 
-            println!("{}\t{}", fp.file_name().unwrap().to_str().unwrap(), avg);
+            let fastqfile = FastqFile {
+                fp: path_str.to_string(),
+                records: records,
+            };
+
+            fastqfiles.push(fastqfile);
         }
+    }
+
+    if fastqfiles.len() == 0 {
+        return Err("No fastq files found".into());
+    } else {
+        Ok(fastqfiles)
     }
 }
