@@ -2,6 +2,7 @@ use fefastq::FastqFile;
 use std::path::Path;
 
 fn trim_records(fq: FastqFile) {
+    println!("{}", &fq.fp);
     let pth = Path::new(&fq.fp);
     let parent = pth.parent().unwrap();
     let stem = pth.file_stem().unwrap();
@@ -14,7 +15,7 @@ fn trim_records(fq: FastqFile) {
     for mut r in fq.records {
         r.plus = String::from("+");
         r.write_record(&new_fp).unwrap();
-        println!("{:?}", r)
+        // println!("{:?}", r)
     }
 }
 fn main() {
