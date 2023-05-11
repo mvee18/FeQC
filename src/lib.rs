@@ -1,4 +1,5 @@
 use clap::Parser;
+use rayon::prelude::*;
 use std::error::Error;
 use std::fs::read_dir;
 use std::fs::File;
@@ -97,6 +98,16 @@ pub fn get_average_quality_score(records: &Vec<Record>) -> f64 {
         sum += calculate_fastq_quality_score(&record.qual);
     }
     sum / records.len() as f64
+}
+
+pub fn rayon_get_average_quality_score(records: &Vec<Record>) -> f64 {
+    let average = records
+        .par_iter()
+        .map(|r| calculate_fastq_quality_score(&r.qual))
+        .sum::<f64>()
+        / records.len() as f64;
+
+    average
 }
 
 #[derive(Parser, Debug)]

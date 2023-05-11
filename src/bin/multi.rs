@@ -2,6 +2,7 @@
 #![allow(unused_imports)]
 use fefastq::{calculate_fastq_quality_score, Record};
 use rand::Rng;
+use rayon::prelude::*;
 use std::error::Error;
 use std::io;
 use std::path::Path;
@@ -82,9 +83,24 @@ fn one_to_one_mpsc(records: Vec<Record>) -> f64 {
 
     let average = sum / count as f64;
 
-    println!("Average quality score: {}", average);
     let duration = start.elapsed();
     println!("Time elapsed in one_to_one() is: {:?}", duration);
+    println!("Average quality score: {}", average);
+    average
+}
+
+fn sequential(records: &Vec<Record>) -> f64 {
+    let start = Instant::now();
+
+    let average = records
+        .iter()
+        .map(|r| calculate_fastq_quality_score(&r.qual))
+        .sum::<f64>()
+        / records.len() as f64;
+
+    let elapsed = start.elapsed();
+    println!("Time elapsed in sequential() is: {:?}", elapsed);
+    println!("Average quality score: {}", average);
     average
 }
 
@@ -93,20 +109,45 @@ fn mpsc_calculate_average(records: Vec<Record>) -> f64 {
     let (tx, rx) = mpsc::channel();
 
     let record_handle = thread::spawn(move || {
+        println!("Hello from the mpsc thread!");
         for record in records {
             let val = calculate_fastq_quality_score(&record.qual);
             tx.send(val).unwrap();
         }
     });
 
-    return 0.0;
+    record_handle.join().unwrap();
+
+    let elapsed = start.elapsed();
+    println!("Time elapsed in mpsc_calculate_average() is: {:?}", elapsed);
+
+    return rx.iter().sum::<f64>();
+}
+
+fn rayon_calculate_average(records: &Vec<Record>) -> f64 {
+    let start = Instant::now();
+    let average = records
+        .par_iter()
+        .map(|r| calculate_fastq_quality_score(&r.qual))
+        .sum::<f64>()
+        / records.len() as f64;
+
+    let elapsed = start.elapsed();
+    println!(
+        "Time elapsed in rayon_calculate_average() is: {:?}",
+        elapsed
+    );
+    println!("Average quality score: {}", average);
+    average
 }
 
 fn main() {
     let fastqfiles = fefastq::read_and_get_records().unwrap();
     for fq in fastqfiles {
         println!("{}", fq.fp);
-        // one_to_one_mpsc(fq.records.clone());
+        one_to_one_mpsc(fq.records.clone());
+        sequential(&fq.records);
+        rayon_calculate_average(&fq.records);
         let val = mpsc_calculate_average(fq.records);
         println!("Avg Score for {}: {}", fq.fp, val);
     }
